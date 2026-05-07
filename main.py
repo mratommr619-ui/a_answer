@@ -7,6 +7,7 @@ from playwright.async_api import async_playwright
 
 app = FastAPI()
 
+# Render သို့မဟုတ် Hugging Face ရဲ့ Environment Variable ထဲမှာ SESSION_DATA ထည့်ထားဖို့ လိုပါတယ်
 SESSION_DATA = os.getenv("SESSION_DATA")
 
 HTML_CONTENT = """
@@ -56,7 +57,7 @@ HTML_CONTENT = """
         .msg {
             max-width: 90%; padding: 15px; border-radius: 18px;
             font-size: 15px; line-height: 1.6; position: relative;
-            animation: slideUp 0.3s ease;
+            animation: slideUp 0.3s ease; word-wrap: break-word;
         }
 
         @keyframes slideUp { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
@@ -64,14 +65,12 @@ HTML_CONTENT = """
         .user { align-self: flex-end; background: linear-gradient(145deg, var(--gold-dark), var(--gold-light)); color: #000; font-weight: 700; }
         .bot { align-self: flex-start; background: #2a2a2a; border: 1px solid #333; box-shadow: var(--shadow-out); }
 
-        /* Copy & Image Tools */
         .tools { display: flex; gap: 10px; margin-top: 10px; border-top: 1px solid #444; padding-top: 8px; }
         .icon-btn { 
             background: none; border: none; color: var(--gold-light); 
             cursor: pointer; font-size: 12px; display: flex; align-items: center; gap: 5px; 
-            padding: 5px; border-radius: 5px; transition: 0.2s;
+            padding: 5px; border-radius: 5px;
         }
-        .icon-btn:hover { background: rgba(241, 196, 15, 0.1); }
 
         .image-gallery { display: flex; flex-direction: column; gap: 15px; margin-top: 10px; }
         .img-card { position: relative; width: 100%; }
@@ -85,7 +84,13 @@ HTML_CONTENT = """
 
         .input-container { padding: 15px; display: flex; gap: 10px; background: var(--container-bg); border-top: 1px solid #333; }
         input { flex: 1; padding: 15px 20px; border: none; border-radius: 30px; background: var(--container-bg); color: var(--text-color); box-shadow: var(--shadow-in); outline: none; font-size: 16px; }
-        button#sendBtn { padding: 10px 20px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
+        
+        #sendBtn { 
+            padding: 10px 20px; background: var(--container-bg); 
+            color: var(--gold-light); border: 1px solid var(--gold-dark); 
+            border-radius: 30px; cursor: pointer; font-weight: 700; 
+            box-shadow: var(--shadow-out); 
+        }
 
         .blink { animation: blinker 1.5s linear infinite; font-style: italic; }
         @keyframes blinker { 50% { opacity: 0.4; } }
@@ -96,8 +101,8 @@ HTML_CONTENT = """
         <header><h2>ATOM AUTO CONTENT WRITER</h2></header>
         <div id="chat-box"></div>
         <div class="input-container">
-            <input type="text" id="userInput" placeholder="မေးခွန်း သို့မဟုတ် ပုံထုတ်ခိုင်းပါ..." autocomplete="off">
-            <button onclick="ask()" id="sendBtn">Send</button>
+            <input type="text" id="userInput" placeholder="Type here..." autocomplete="off">
+            <button id="sendBtn">Send</button>
         </div>
     </div>
 
@@ -109,7 +114,10 @@ HTML_CONTENT = """
         async function ask() {
             const q = input.value.trim();
             if(!q) return;
-            input.value = ''; btn.disabled = true;
+
+            input.value = '';
+            btn.disabled = true;
+
             box.innerHTML += `<div class="msg user">${q}</div>`;
             box.scrollTop = box.scrollHeight;
 
@@ -118,7 +126,7 @@ HTML_CONTENT = """
             box.scrollTop = box.scrollHeight;
 
             try {
-                const r = await fetch(`/ask?q=${encodeURIComponent(q)}`);
+                const r = await fetch("/ask?q=" + encodeURIComponent(q));
                 const d = await r.json();
                 const target = document.getElementById(tid);
                 target.classList.remove('blink');
@@ -129,12 +137,17 @@ HTML_CONTENT = """
                     textDiv.innerText = d.answer;
                     target.appendChild(textDiv);
                     
-                    // Copy Button
                     const toolDiv = document.createElement('div');
                     toolDiv.className = 'tools';
-                    toolDiv.innerHTML = `<button class="icon-btn" onclick="copyText(this, \`${d.answer.replace(/`/g, '\\`').replace(/\\/g, '\\\\')}\`)">
-                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg> Copy Text
-                    </button>`;
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'icon-btn';
+                    copyBtn.innerHTML = 'Copy Text';
+                    copyBtn.onclick = () => {
+                        navigator.clipboard.writeText(d.answer);
+                        copyBtn.innerText = '✅ Copied!';
+                        setTimeout(() => copyBtn.innerText = 'Copy Text', 2000);
+                    };
+                    toolDiv.appendChild(copyBtn);
                     target.appendChild(toolDiv);
                 }
 
@@ -144,72 +157,88 @@ HTML_CONTENT = """
                     d.images.forEach(src => {
                         const card = document.createElement('div');
                         card.className = 'img-card';
-                        card.innerHTML = `<img src="${src}" class="gemini-img">
-                        <button class="dl-btn" onclick="downloadImg('${src}')">
-                            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v4"></path><polyline points="7 10 12 15 17 10"></polyline><line x1="12" y1="15" x2="12" y2="3"></line></svg>
-                        </button>`;
+                        card.innerHTML = '<img src="'+src+'" class="gemini-img"><button class="dl-btn">DL</button>';
+                        card.querySelector('.dl-btn').onclick = () => window.open(src, '_blank');
                         gall.appendChild(card);
                     });
                     target.appendChild(gall);
                 }
-            } catch (e) { document.getElementById(tid).innerText = "Error: Connection failed."; }
-            btn.disabled = false; box.scrollTop = box.scrollHeight;
+                if (d.error) target.innerText = "Error: " + d.error;
+
+            } catch (e) {
+                document.getElementById(tid).innerText = "Error: Connection failed.";
+            }
+
+            btn.disabled = false;
+            box.scrollTop = box.scrollHeight;
         }
 
-        function copyText(btn, txt) {
-            navigator.clipboard.writeText(txt);
-            const original = btn.innerHTML;
-            btn.innerHTML = "✅ Copied!";
-            setTimeout(() => btn.innerHTML = original, 2000);
-        }
-
-        async function downloadImg(url) {
-            try {
-                const response = await fetch(url);
-                const blob = await response.blob();
-                const link = document.createElement('a');
-                link.href = window.URL.createObjectURL(blob);
-                link.download = `AtomAI_${Date.now()}.jpg`;
-                link.click();
-            } catch (e) { alert("Download failed. Try opening image in new tab."); window.open(url, '_blank'); }
-        }
-
-        input.addEventListener("keypress", (e) => { if(e.key === "Enter") ask(); });
+        btn.onclick = ask;
+        input.onkeydown = (e) => { if(e.key === "Enter") ask(); };
     </script>
 </body>
 </html>
 """
 
 @app.get("/", response_class=HTMLResponse)
-async def home(): return HTML_CONTENT
+async def home():
+    return HTML_CONTENT
 
 @app.get("/ask")
 async def ask_gemini(q: str):
-    if not SESSION_DATA: return {"error": "SESSION_DATA missing!"}
-    with open("auth.json", "w") as f: f.write(SESSION_DATA)
+    if not SESSION_DATA:
+        return {"error": "SESSION_DATA missing!"}
+    
+    # auth.json ဖန်တီးခြင်း
+    with open("auth.json", "w") as f:
+        f.write(SESSION_DATA)
+        
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
         try:
-            context = await browser.new_context(storage_state="auth.json", user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            context = await browser.new_context(
+                storage_state="auth.json", 
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+            )
             page = await context.new_page()
-            if hasattr(playwright_stealth, 'stealth_async'): await playwright_stealth.stealth_async(page)
+            
+            # Stealth mode စစ်ဆေးခြင်း
+            if hasattr(playwright_stealth, 'stealth_async'):
+                await playwright_stealth.stealth_async(page)
+                
             await page.goto("https://gemini.google.com/app", timeout=60000)
+            
+            # Textbox ကို ရှာပြီး ရိုက်ထည့်ခြင်း
             textbox = await page.wait_for_selector('div[role="textbox"]', timeout=30000)
-            await textbox.fill(q); await page.keyboard.press("Enter")
+            await textbox.fill(q)
+            await page.keyboard.press("Enter")
+            
+            # Gemini စဉ်းစားပြီး အဖြေပြန်ပေးချိန်ကို စောင့်ခြင်း
             await asyncio.sleep(18)
+            
             responses = await page.query_selector_all(".message-content")
             if responses:
                 last_res = responses[-1]
+                
+                # စာသားယူခြင်း
                 text_el = await last_res.query_selector(".model-response-text, div.markdown")
                 ans_text = await text_el.inner_text() if text_el else ""
+                
+                # ပုံယူခြင်း
                 imgs = []
                 img_els = await last_res.query_selector_all("img")
                 for i in img_els:
                     src = await i.get_attribute("src")
-                    if src and src.startswith("https://"): imgs.append(src)
+                    if src and src.startswith("https://"):
+                        imgs.append(src)
+                
                 await browser.close()
                 return {"answer": ans_text, "images": imgs}
+            
             await browser.close()
-            return {"answer": "No response.", "images": []}
+            return {"answer": "No response from Gemini.", "images": []}
+            
         except Exception as e:
-            await browser.close(); return {"error": str(e), "images": []}
+            if 'browser' in locals():
+                await browser.close()
+            return {"error": str(e), "images": []}
