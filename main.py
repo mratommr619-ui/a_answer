@@ -2,8 +2,8 @@ import os
 import asyncio
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-import playwright_stealth
 from playwright.async_api import async_playwright
+import playwright_stealth
 
 app = FastAPI()
 
@@ -32,13 +32,14 @@ HTML_CONTENT = """
             margin: 0; padding: 0; width: 100%; height: 100%;
             overflow: hidden; background: var(--bg-color);
             font-family: 'Segoe UI', sans-serif;
-            color: #ffffff !important; /* စာလုံးအရောင် အဖြူ */
+            color: #ffffff !important;
         }
 
         .main-wrapper {
             display: flex; flex-direction: column;
             width: 100%; height: 100vh; max-width: 600px;
             margin: 0 auto; background: var(--container-bg);
+            box-shadow: 0 0 20px rgba(0,0,0,0.5);
         }
 
         header { padding: 15px; text-align: center; border-bottom: 1px solid #333; }
@@ -61,6 +62,7 @@ HTML_CONTENT = """
 
         .user { align-self: flex-end; background: linear-gradient(145deg, var(--gold-dark), var(--gold-light)); color: #000 !important; font-weight: 700; }
         
+        /* Bot Message - စာလုံးအရောင် အဖြူစစ်စစ် */
         .bot { 
             align-self: flex-start; background: #2a2a2a; border: 1px solid #333; 
             color: #ffffff !important; box-shadow: var(--shadow-out); 
@@ -70,17 +72,18 @@ HTML_CONTENT = """
         pre { margin: 10px 0; border-radius: 10px; overflow: hidden; background: #1e1e1e !important; }
         .hljs { padding: 15px; background: #1e1e1e !important; color: #dcdcaa !important; }
 
-        .tools { display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #444; padding-top: 10px; }
-        .icon-btn { background: none; border: none; color: var(--gold-light); cursor: pointer; font-size: 13px; }
+        .tools { display: flex; gap: 12px; margin-top: 10px; border-top: 1px solid #444; padding-top: 8px; }
+        .icon-btn { background: none; border: none; color: var(--gold-light); cursor: pointer; font-size: 13px; font-weight: bold; }
 
         .img-card { position: relative; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid var(--gold-dark); }
         .gemini-img { width: 100%; display: block; }
         .dl-btn { position: absolute; top: 10px; right: 10px; background: #000; color: #fff; border: none; padding: 8px; border-radius: 50%; cursor: pointer; }
 
         .input-container { padding: 15px; display: flex; gap: 10px; background: var(--container-bg); border-top: 1px solid #333; }
-        input { flex: 1; padding: 15px 20px; border: none; border-radius: 30px; background: var(--container-bg); color: #fff; box-shadow: var(--shadow-in); outline: none; }
+        input { flex: 1; padding: 15px 20px; border: none; border-radius: 30px; background: var(--container-bg); color: #fff; box-shadow: var(--shadow-in); outline: none; font-size: 16px; }
         
-        #sendBtn { padding: 10px 25px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; }
+        #sendBtn { padding: 10px 25px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
+        #sendBtn:active { box-shadow: var(--shadow-in); }
 
         .blink { animation: blinker 1.5s linear infinite; color: var(--gold-light); }
         @keyframes blinker { 50% { opacity: 0.3; } }
@@ -91,7 +94,7 @@ HTML_CONTENT = """
         <header><h2>ATOM AI CONTENT WRITER</h2></header>
         <div id="chat-box"></div>
         <div class="input-container">
-            <input type="text" id="userInput" placeholder="Ask anything..." autocomplete="off">
+            <input type="text" id="userInput" placeholder="Ask anything or generate images..." autocomplete="off">
             <button id="sendBtn">Send</button>
         </div>
     </div>
@@ -133,7 +136,7 @@ HTML_CONTENT = """
                     
                     const tools = document.createElement('div');
                     tools.className = 'tools';
-                    tools.innerHTML = `<button class="icon-btn" onclick="navigator.clipboard.writeText(\`${d.answer.replace(/`/g, '\\\\`')}\`); this.innerText='✅ Copied!'">Copy Text</button>`;
+                    tools.innerHTML = `<button class="icon-btn" onclick="copyText(this, \\\`${d.answer.replace(/`/g, '\\\\\\`')}\\\`)">Copy Text</button>`;
                     target.appendChild(tools);
                 }
                 if (d.images && d.images.length > 0) {
@@ -144,9 +147,15 @@ HTML_CONTENT = """
                         target.appendChild(card);
                     });
                 }
-                if (d.error) target.innerText = "Error: " + d.error;
+                if (d.error) target.innerHTML = `<div style="color:#ff4444">Error: ${d.error}</div>`;
             } catch (e) { document.getElementById(tid).innerText = "Error: Connection failed."; }
             btn.disabled = false; box.scrollTop = box.scrollHeight; input.focus();
+        }
+
+        function copyText(el, txt) {
+            navigator.clipboard.writeText(txt);
+            el.innerText = '✅ Copied!';
+            setTimeout(() => el.innerText = 'Copy Text', 2000);
         }
 
         btn.onclick = ask;
@@ -168,16 +177,19 @@ async def ask_gemini(q: str):
         try:
             context = await browser.new_context(storage_state="auth.json", user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
             page = await context.new_page()
+            
+            # Error တက်နေသည့် အပိုင်းကို ပြင်ဆင်ခြင်း
             await playwright_stealth.stealth_async(page)
+            
             await page.goto("https://gemini.google.com/app", timeout=60000)
             
             textbox = await page.wait_for_selector('div[role="textbox"]', timeout=30000)
             await textbox.fill(q); await page.keyboard.press("Enter")
             
-            # စာသားပြန်ယူရန် စောင့်ဆိုင်းသည့်စနစ်သစ် (Turbo)
             ans_text = ""
             imgs = []
-            for _ in range(20): # စက္ကန့် ၂၀ စောင့်မည်
+            # Turbo loop
+            for _ in range(25): 
                 await asyncio.sleep(1.5)
                 responses = await page.query_selector_all(".message-content")
                 if responses:
@@ -191,7 +203,8 @@ async def ask_gemini(q: str):
                             break
             
             await browser.close()
-            return {"answer": ans_text or "Gemini is busy, try again.", "images": imgs}
+            if not ans_text: return {"error": "No response. Website might be too slow."}
+            return {"answer": ans_text, "images": imgs}
         except Exception as e:
             if 'browser' in locals(): await browser.close()
             return {"error": str(e)}
