@@ -2,8 +2,8 @@ name: Sync to Hugging Face hub
 on:
   push:
     branches: [main]
-  force_push:
-    branches: [main]
+  workflow_dispatch:
+
 jobs:
   sync-to-hub:
     runs-on: ubuntu-latest
@@ -15,4 +15,4 @@ jobs:
       - name: Push to hub
         env:
           HF_TOKEN: ${{ secrets.HF_TOKEN }}
-        run: git push --force https://<သင့်_Hugging_Face_Username>:$HF_TOKEN@huggingface.co/spaces/<သင့်_Space_နာမည်> main
+        run: git push --force https://mratom1991:$HF_TOKEN@huggingface.co/spaces/mratom1991/Atom-Gemini main
