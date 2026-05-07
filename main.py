@@ -3,7 +3,6 @@ import asyncio
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
 from playwright.async_api import async_playwright
-import playwright_stealth
 
 app = FastAPI()
 
@@ -31,19 +30,19 @@ HTML_CONTENT = """
         html, body {
             margin: 0; padding: 0; width: 100%; height: 100%;
             overflow: hidden; background: var(--bg-color);
-            font-family: 'Segoe UI', sans-serif;
-            color: #ffffff !important;
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            color: white !important;
         }
 
         .main-wrapper {
             display: flex; flex-direction: column;
             width: 100%; height: 100vh; max-width: 600px;
             margin: 0 auto; background: var(--container-bg);
-            box-shadow: 0 0 25px rgba(0,0,0,0.5);
+            position: relative;
         }
 
         header { padding: 15px; text-align: center; border-bottom: 1px solid #333; }
-        h2 { color: var(--gold-light); margin: 0; font-size: 18px; letter-spacing: 2px; }
+        h2 { color: var(--gold-light); margin: 0; font-size: 18px; letter-spacing: 2px; text-transform: uppercase; }
 
         #chat-box {
             flex: 1; overflow-y: auto; padding: 20px;
@@ -52,38 +51,35 @@ HTML_CONTENT = """
             margin: 10px; border-radius: 20px;
         }
 
-        #chat-box::-webkit-scrollbar { width: 4px; }
-        #chat-box::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 10px; }
-
         .msg {
             max-width: 90%; padding: 15px; border-radius: 18px;
             font-size: 15px; line-height: 1.6; word-wrap: break-word;
             animation: fadeIn 0.3s ease;
         }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-        .user { align-self: flex-end; background: linear-gradient(145deg, var(--gold-dark), var(--gold-light)); color: #000 !important; font-weight: 700; }
+        .user { align-self: flex-end; background: linear-gradient(145deg, var(--gold-dark), var(--gold-light)); color: black !important; font-weight: bold; }
         
         .bot { 
             align-self: flex-start; background: #2a2a2a; border: 1px solid #333; 
-            color: #ffffff !important; box-shadow: var(--shadow-out); 
+            color: white !important; box-shadow: var(--shadow-out); 
         }
 
         pre { margin: 10px 0; border-radius: 10px; overflow: hidden; background: #1e1e1e !important; }
         .hljs { padding: 15px; background: #1e1e1e !important; color: #dcdcaa !important; }
 
-        .tools { display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #444; padding-top: 10px; }
+        .tools { display: flex; gap: 12px; margin-top: 10px; border-top: 1px solid #444; padding-top: 8px; }
         .icon-btn { background: none; border: none; color: var(--gold-light); cursor: pointer; font-size: 13px; font-weight: bold; }
 
         .img-card { position: relative; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid var(--gold-dark); }
-        .gemini-img { width: 100%; display: block; cursor: pointer; }
+        .gemini-img { width: 100%; display: block; }
         .dl-btn { position: absolute; top: 10px; right: 10px; background: #000; color: #fff; border: none; padding: 8px; border-radius: 50%; cursor: pointer; }
 
         .input-container { padding: 15px; display: flex; gap: 10px; background: var(--container-bg); border-top: 1px solid #333; }
-        input { flex: 1; padding: 15px 20px; border: none; border-radius: 30px; background: var(--container-bg); color: #fff; box-shadow: var(--shadow-in); outline: none; font-size: 16px; }
+        input { flex: 1; padding: 15px 20px; border: none; border-radius: 30px; background: var(--container-bg); color: white; box-shadow: var(--shadow-in); outline: none; font-size: 16px; }
         
-        #sendBtn { padding: 10px 25px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
+        button#sendBtn { padding: 10px 25px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
 
         .blink { animation: blinker 1.5s linear infinite; color: var(--gold-light); }
         @keyframes blinker { 50% { opacity: 0.3; } }
@@ -156,7 +152,7 @@ HTML_CONTENT = """
                     d.images.forEach(src => {
                         const card = document.createElement('div');
                         card.className = 'img-card';
-                        card.innerHTML = `<img src="${src}" class="gemini-img" onclick="window.open('${src}', '_blank')"><button class="dl-btn">DL</button>`;
+                        card.innerHTML = `<img src="${src}" class="gemini-img"><button class="dl-btn">DL</button>`;
                         card.querySelector('.dl-btn').onclick = () => window.open(src, '_blank');
                         target.appendChild(card);
                     });
@@ -173,16 +169,13 @@ HTML_CONTENT = """
             input.focus();
         }
 
-        // Button Click Fix
-        btn.onclick = () => { ask(); };
-
-        // Enter Key Fix
-        input.onkeydown = (e) => {
+        btn.addEventListener('click', ask);
+        input.addEventListener('keydown', (e) => {
             if (e.key === "Enter") {
                 e.preventDefault();
                 ask();
             }
-        };
+        });
     </script>
 </body>
 </html>
@@ -198,21 +191,20 @@ async def ask_gemini(q: str):
     async with async_playwright() as p:
         browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage'])
         try:
-            context = await browser.new_context(storage_state="auth.json", user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
+            # User Agent ကို အသေသတ်မှတ်ပြီး stealth error ကို ဖြေရှင်းထားသည်
+            context = await browser.new_context(
+                storage_state="auth.json", 
+                user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36"
+            )
             page = await context.new_page()
-            
-            # Stealth အပိုင်းကို error မတက်အောင် ချိန်ထားသည်
-            await playwright_stealth.stealth_async(page)
             
             await page.goto("https://gemini.google.com/app", timeout=60000)
             
-            # Textbox selector ကို ပိုစိတ်ချရအောင် စစ်သည်
             textbox = await page.wait_for_selector('div[role="textbox"]', timeout=30000)
             await textbox.fill(q); await page.keyboard.press("Enter")
             
             ans_text = ""
             imgs = []
-            # အဖြေထွက်လာသည်အထိ Turbo စနစ်ဖြင့် စောင့်မည်
             for _ in range(25): 
                 await asyncio.sleep(1.5)
                 responses = await page.query_selector_all(".message-content")
@@ -227,7 +219,7 @@ async def ask_gemini(q: str):
                             break
             
             await browser.close()
-            if not ans_text: return {"error": "No response from Gemini. Please check your Session."}
+            if not ans_text: return {"error": "No response from Gemini. Try again."}
             return {"answer": ans_text, "images": imgs}
         except Exception as e:
             if 'browser' in locals(): await browser.close()
