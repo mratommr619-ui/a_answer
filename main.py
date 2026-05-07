@@ -39,7 +39,7 @@ HTML_CONTENT = """
             display: flex; flex-direction: column;
             width: 100%; height: 100vh; max-width: 600px;
             margin: 0 auto; background: var(--container-bg);
-            box-shadow: 0 0 20px rgba(0,0,0,0.5);
+            box-shadow: 0 0 25px rgba(0,0,0,0.5);
         }
 
         header { padding: 15px; text-align: center; border-bottom: 1px solid #333; }
@@ -52,38 +52,38 @@ HTML_CONTENT = """
             margin: 10px; border-radius: 20px;
         }
 
+        #chat-box::-webkit-scrollbar { width: 4px; }
+        #chat-box::-webkit-scrollbar-thumb { background: var(--gold-dark); border-radius: 10px; }
+
         .msg {
             max-width: 90%; padding: 15px; border-radius: 18px;
             font-size: 15px; line-height: 1.6; word-wrap: break-word;
             animation: fadeIn 0.3s ease;
         }
 
-        @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
 
         .user { align-self: flex-end; background: linear-gradient(145deg, var(--gold-dark), var(--gold-light)); color: #000 !important; font-weight: 700; }
         
-        /* Bot Message - စာလုံးအရောင် အဖြူစစ်စစ် */
         .bot { 
             align-self: flex-start; background: #2a2a2a; border: 1px solid #333; 
             color: #ffffff !important; box-shadow: var(--shadow-out); 
         }
 
-        /* VS Code Style Code Blocks */
         pre { margin: 10px 0; border-radius: 10px; overflow: hidden; background: #1e1e1e !important; }
         .hljs { padding: 15px; background: #1e1e1e !important; color: #dcdcaa !important; }
 
-        .tools { display: flex; gap: 12px; margin-top: 10px; border-top: 1px solid #444; padding-top: 8px; }
+        .tools { display: flex; gap: 12px; margin-top: 12px; border-top: 1px solid #444; padding-top: 10px; }
         .icon-btn { background: none; border: none; color: var(--gold-light); cursor: pointer; font-size: 13px; font-weight: bold; }
 
         .img-card { position: relative; margin-top: 10px; border-radius: 12px; overflow: hidden; border: 1px solid var(--gold-dark); }
-        .gemini-img { width: 100%; display: block; }
+        .gemini-img { width: 100%; display: block; cursor: pointer; }
         .dl-btn { position: absolute; top: 10px; right: 10px; background: #000; color: #fff; border: none; padding: 8px; border-radius: 50%; cursor: pointer; }
 
         .input-container { padding: 15px; display: flex; gap: 10px; background: var(--container-bg); border-top: 1px solid #333; }
         input { flex: 1; padding: 15px 20px; border: none; border-radius: 30px; background: var(--container-bg); color: #fff; box-shadow: var(--shadow-in); outline: none; font-size: 16px; }
         
         #sendBtn { padding: 10px 25px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
-        #sendBtn:active { box-shadow: var(--shadow-in); }
 
         .blink { animation: blinker 1.5s linear infinite; color: var(--gold-light); }
         @keyframes blinker { 50% { opacity: 0.3; } }
@@ -94,7 +94,7 @@ HTML_CONTENT = """
         <header><h2>ATOM AI CONTENT WRITER</h2></header>
         <div id="chat-box"></div>
         <div class="input-container">
-            <input type="text" id="userInput" placeholder="Ask anything or generate images..." autocomplete="off">
+            <input type="text" id="userInput" placeholder="Ask anything..." autocomplete="off">
             <button id="sendBtn">Send</button>
         </div>
     </div>
@@ -104,7 +104,7 @@ HTML_CONTENT = """
         const input = document.getElementById('userInput');
         const btn = document.getElementById('sendBtn');
 
-        function formatText(text) {
+        function formatMsg(text) {
             let t = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
             t = t.replace(/```([\\s\\S]*?)```/g, '<pre><code>$1</code></pre>');
             t = t.replace(/`([^`]+)`/g, '<code>$1</code>');
@@ -114,9 +114,13 @@ HTML_CONTENT = """
         async function ask() {
             const q = input.value.trim();
             if(!q || btn.disabled) return;
-            input.value = ''; btn.disabled = true;
+
+            input.value = '';
+            btn.disabled = true;
+
             box.innerHTML += `<div class="msg user">${q}</div>`;
             box.scrollTop = box.scrollHeight;
+
             const tid = 't-' + Date.now();
             box.innerHTML += `<div class="msg bot blink" id="${tid}">Thinking....</div>`;
             box.scrollTop = box.scrollHeight;
@@ -130,36 +134,55 @@ HTML_CONTENT = """
 
                 if (d.answer) {
                     const content = document.createElement('div');
-                    content.innerHTML = formatText(d.answer);
+                    content.innerHTML = formatMsg(d.answer);
                     target.appendChild(content);
                     target.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
                     
                     const tools = document.createElement('div');
                     tools.className = 'tools';
-                    tools.innerHTML = `<button class="icon-btn" onclick="copyText(this, \\\`${d.answer.replace(/`/g, '\\\\\\`')}\\\`)">Copy Text</button>`;
+                    const cpBtn = document.createElement('button');
+                    cpBtn.className = 'icon-btn';
+                    cpBtn.innerText = 'Copy Text';
+                    cpBtn.onclick = () => {
+                        navigator.clipboard.writeText(d.answer);
+                        cpBtn.innerText = '✅ Copied!';
+                        setTimeout(() => cpBtn.innerText = 'Copy Text', 2000);
+                    };
+                    tools.appendChild(cpBtn);
                     target.appendChild(tools);
                 }
+
                 if (d.images && d.images.length > 0) {
                     d.images.forEach(src => {
                         const card = document.createElement('div');
                         card.className = 'img-card';
-                        card.innerHTML = `<img src="${src}" class="gemini-img"><button class="dl-btn" onclick="window.open('${src}', '_blank')">DL</button>`;
+                        card.innerHTML = `<img src="${src}" class="gemini-img" onclick="window.open('${src}', '_blank')"><button class="dl-btn">DL</button>`;
+                        card.querySelector('.dl-btn').onclick = () => window.open(src, '_blank');
                         target.appendChild(card);
                     });
                 }
-                if (d.error) target.innerHTML = `<div style="color:#ff4444">Error: ${d.error}</div>`;
-            } catch (e) { document.getElementById(tid).innerText = "Error: Connection failed."; }
-            btn.disabled = false; box.scrollTop = box.scrollHeight; input.focus();
+                
+                if (d.error) target.innerHTML = `<div style="color: #ff4444;">Error: ${d.error}</div>`;
+
+            } catch (e) {
+                document.getElementById(tid).innerText = "Error: Connection failed.";
+            }
+
+            btn.disabled = false;
+            box.scrollTop = box.scrollHeight;
+            input.focus();
         }
 
-        function copyText(el, txt) {
-            navigator.clipboard.writeText(txt);
-            el.innerText = '✅ Copied!';
-            setTimeout(() => el.innerText = 'Copy Text', 2000);
-        }
+        // Button Click Fix
+        btn.onclick = () => { ask(); };
 
-        btn.onclick = ask;
-        input.onkeydown = (e) => { if(e.key === "Enter") { e.preventDefault(); ask(); } };
+        // Enter Key Fix
+        input.onkeydown = (e) => {
+            if (e.key === "Enter") {
+                e.preventDefault();
+                ask();
+            }
+        };
     </script>
 </body>
 </html>
@@ -178,17 +201,18 @@ async def ask_gemini(q: str):
             context = await browser.new_context(storage_state="auth.json", user_agent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36")
             page = await context.new_page()
             
-            # Error တက်နေသည့် အပိုင်းကို ပြင်ဆင်ခြင်း
+            # Stealth အပိုင်းကို error မတက်အောင် ချိန်ထားသည်
             await playwright_stealth.stealth_async(page)
             
             await page.goto("https://gemini.google.com/app", timeout=60000)
             
+            # Textbox selector ကို ပိုစိတ်ချရအောင် စစ်သည်
             textbox = await page.wait_for_selector('div[role="textbox"]', timeout=30000)
             await textbox.fill(q); await page.keyboard.press("Enter")
             
             ans_text = ""
             imgs = []
-            # Turbo loop
+            # အဖြေထွက်လာသည်အထိ Turbo စနစ်ဖြင့် စောင့်မည်
             for _ in range(25): 
                 await asyncio.sleep(1.5)
                 responses = await page.query_selector_all(".message-content")
@@ -199,11 +223,11 @@ async def ask_gemini(q: str):
                         ans_text = await text_el.inner_text()
                         if len(ans_text.strip()) > 0:
                             img_els = await last_res.query_selector_all("img")
-                            imgs = [await i.get_attribute("src") for i in img_els if await i.get_attribute("src")]
+                            imgs = [await i.get_attribute("src") for i in img_els if await i.get_attribute("src") and (await i.get_attribute("src")).startswith("https://")]
                             break
             
             await browser.close()
-            if not ans_text: return {"error": "No response. Website might be too slow."}
+            if not ans_text: return {"error": "No response from Gemini. Please check your Session."}
             return {"answer": ans_text, "images": imgs}
         except Exception as e:
             if 'browser' in locals(): await browser.close()
