@@ -2,7 +2,7 @@
 title: Atom Auto Content Writer
 emoji: 🤖
 colorFrom: yellow
-colorTo: black
+colorTo: gray
 sdk: docker
 pinned: false
 ---
