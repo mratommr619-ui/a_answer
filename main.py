@@ -1,19 +1,39 @@
 import os
 import asyncio
+import httpx
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse
-import playwright_stealth  # import ပုံစံကို ပြောင်းလိုက်ပါပြီ
+import playwright_stealth
 from playwright.async_api import async_playwright
 
 app = FastAPI()
 
 SESSION_DATA = os.getenv("SESSION_DATA")
+RENDER_URL = "https://a-answer.onrender.com" # သင့် Render URL ကို ဒီမှာ ထည့်ပါ
 
+# --- Self-Ping Background Task ---
+async def keep_alive():
+    """၁၀ မိနစ်တစ်ခါ ကိုယ့် URL ကိုယ် ပြန်ခေါ်ပြီး Bot မအိပ်အောင် လုပ်ပေးမည့် function"""
+    async with httpx.AsyncClient() as client:
+        while True:
+            try:
+                await asyncio.sleep(600) # ၁၀ မိနစ် (၆၀၀ စက္ကန့်) စောင့်မည်
+                response = await client.get(RENDER_URL)
+                print(f"Self-ping status: {response.status_code}")
+            except Exception as e:
+                print(f"Self-ping failed: {e}")
+
+@app.on_event("startup")
+async def startup_event():
+    # Bot စတက်တာနဲ့ နောက်ကွယ်မှာ keep_alive ကို စခိုင်းမည်
+    asyncio.create_task(keep_alive())
+
+# --- UI HTML Content ---
 HTML_CONTENT = """
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Atom Auto Content Writer</title>
+    <title>ATOM AI CONTENT WRITER</title>
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         :root {
@@ -21,29 +41,29 @@ HTML_CONTENT = """
             --container-bg: #222222;
             --gold-light: #f1c40f;
             --gold-dark: #d4af37;
-            --shadow-out: 6px 6px 12px #0d0d0d, -6px -6px 12px #272727;
-            --shadow-in: inset 4px 4px 8px #0d0d0d, inset -4px -4px 8px #272727;
+            --shadow-out: 8px 8px 16px #0d0d0d, -8px -8px 16px #272727;
+            --shadow-in: inset 6px 6px 12px #0d0d0d, inset -6px -6px 12px #272727;
             --text-color: #e0e0e0;
         }
         body { font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; align-items: center; background: var(--bg-color); margin: 0; padding: 20px; color: var(--text-color); }
-        .chat-container { width: 100%; max-width: 550px; background: var(--container-bg); padding: 30px; border-radius: 30px; box-shadow: var(--shadow-out); border: 1px solid #333; }
-        h2 { color: var(--gold-light); text-align: center; text-transform: uppercase; letter-spacing: 2px; }
-        #chat-box { height: 400px; overflow-y: auto; margin-bottom: 25px; padding: 20px; border-radius: 20px; background: var(--container-bg); box-shadow: var(--shadow-in); display: flex; flex-direction: column; }
-        .msg { margin: 10px 0; padding: 12px 18px; border-radius: 15px; max-width: 85%; line-height: 1.6; }
-        .user { align-self: flex-end; background: linear-gradient(145deg, #d4af37, #f1c40f); color: #000; font-weight: 600; }
+        .chat-container { width: 100%; max-width: 550px; background: var(--container-bg); padding: 40px; border-radius: 40px; box-shadow: var(--shadow-out); border: 1px solid #333; }
+        h2 { color: var(--gold-light); text-align: center; text-transform: uppercase; letter-spacing: 3px; font-size: 24px; }
+        #chat-box { height: 450px; overflow-y: auto; margin-bottom: 30px; padding: 25px; border-radius: 25px; background: var(--container-bg); box-shadow: var(--shadow-in); display: flex; flex-direction: column; }
+        .msg { margin: 10px 0; padding: 15px; border-radius: 18px; max-width: 85%; line-height: 1.6; }
+        .user { align-self: flex-end; background: linear-gradient(145deg, #d4af37, #f1c40f); color: #000; font-weight: 700; }
         .bot { align-self: flex-start; background: #2a2a2a; border: 1px solid #333; }
         .input-area { display: flex; gap: 15px; }
-        input { flex: 1; padding: 15px; border: none; border-radius: 25px; background: var(--container-bg); color: var(--text-color); box-shadow: var(--shadow-in); outline: none; }
-        button { padding: 10px 25px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 25px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
+        input { flex: 1; padding: 15px 25px; border: none; border-radius: 30px; background: var(--container-bg); color: var(--text-color); box-shadow: var(--shadow-in); outline: none; }
+        button { padding: 12px 30px; background: var(--container-bg); color: var(--gold-light); border: 1px solid var(--gold-dark); border-radius: 30px; cursor: pointer; font-weight: 700; box-shadow: var(--shadow-out); }
         button:hover { background: var(--gold-light); color: #000; }
-        button:disabled { opacity: 0.5; }
+        button:disabled { opacity: 0.4; }
         .blink { animation: blinker 1.5s linear infinite; }
         @keyframes blinker { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
     <div class="chat-container">
-        <h2>Atom Auto Content Writer</h2>
+        <h2>ATOM AUTO CONTENT WRITER</h2>
         <div id="chat-box"></div>
         <div class="input-area">
             <input type="text" id="userInput" placeholder="မေးခွန်းရိုက်ပါ..." onkeypress="if(event.key==='Enter') ask()">
@@ -83,30 +103,37 @@ async def home():
 @app.get("/ask")
 async def ask_gemini(q: str):
     if not SESSION_DATA:
-        return {"error": "SESSION_DATA variable is missing!"}
-
+        return {"error": "SESSION_DATA missing!"}
+    
+    # Session file storage
     with open("auth.json", "w") as f:
         f.write(SESSION_DATA)
 
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=True, args=['--no-sandbox', '--disable-setuid-sandbox'])
-        context = await browser.new_context(storage_state="auth.json")
-        page = await context.new_page()
-        
-        # Stealth mode ကို Dynamic check လုပ်ပြီး သုံးခြင်း (Error ကင်းစေရန်)
-        if hasattr(playwright_stealth, 'stealth_async'):
-            await playwright_stealth.stealth_async(page)
-        elif hasattr(playwright_stealth, 'stealth_page_async'):
-            await playwright_stealth.stealth_page_async(page)
-        
+        browser = await p.chromium.launch(
+            headless=True, 
+            args=['--no-sandbox', '--disable-setuid-sandbox', '--disable-dev-shm-usage', '--single-process']
+        )
         try:
+            context = await browser.new_context(storage_state="auth.json")
+            page = await context.new_page()
+            
+            if hasattr(playwright_stealth, 'stealth_async'):
+                await playwright_stealth.stealth_async(page)
+
             await page.goto("https://gemini.google.com/app", timeout=60000)
+            
+            # Textbox ကို ရှာပြီး ရိုက်ခြင်း
+            await page.wait_for_selector('div[role="textbox"]', timeout=30000)
             await page.fill('div[role="textbox"]', q)
             await page.keyboard.press("Enter")
-            await asyncio.sleep(12)
+            
+            # Gemini အဖြေပေးချိန်စောင့်ရန်
+            await asyncio.sleep(15)
             
             responses = await page.query_selector_all(".message-content")
-            answer = await responses[-1].inner_text() if responses else "No response from Gemini."
+            answer = await responses[-1].inner_text() if responses else "No answer returned."
+            
             await browser.close()
             return {"answer": answer}
         except Exception as e:
