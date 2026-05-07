@@ -1,7 +1,6 @@
-# 3.10-bullseye က Playwright နဲ့ အကိုက်ညီဆုံးပါ
 FROM python:3.10-bullseye
 
-# အခြေခံ အလိုအပ်ဆုံးတွေပဲ သွင်းမယ်
+# Browser အတွက် လိုအပ်တာတွေ အကုန်သွင်းမယ်
 RUN apt-get update && apt-get install -y \
     wget \
     gnupg \
@@ -12,9 +11,13 @@ WORKDIR /app
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Playwright ကို သူ့ဘာသာသူ အကုန်သွင်းခိုင်းမယ် (Bullseye မှာ error မတက်ပါ)
+# Browser သွင်းမယ်
 RUN playwright install chromium
 RUN playwright install-deps chromium
+
+# --- ဒီအပိုင်းက အရေးကြီးဆုံးပါ ---
+# GitHub ထဲမှာ သင်သိမ်းထားတဲ့ session_data folder ကို Docker image ထဲ ကူးထည့်တာ
+COPY ./session_data /app/session_data
 
 COPY . .
 
