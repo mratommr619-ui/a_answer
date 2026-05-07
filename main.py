@@ -12,134 +12,96 @@ SESSION_DATA = os.getenv("SESSION_DATA")
 # HTML UI (သင်နှစ်သက်သော Black & Gold ဒီဇိုင်းကို အစအဆုံး ပြန်ထည့်ပေးထားပါသည်)
 HTML_CONTENT = """
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>ATOM AI CONTENT WRITER</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
     <style>
         :root {
-            --bg-color: #0f0f0f;
-            --container-bg: #1a1a1a;
+            --bg-color: #1a1a1a;
+            --container-bg: #222222;
             --gold-light: #f1c40f;
             --gold-dark: #d4af37;
+            --shadow-out: 8px 8px 16px #0d0d0d, -8px -8px 16px #272727;
+            --shadow-in: inset 6px 6px 12px #0d0d0d, inset -6px -6px 12px #272727;
             --text-color: #e0e0e0;
         }
-
-        * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body, html { 
             margin: 0; padding: 0; height: 100%; width: 100%; 
             background: var(--bg-color); color: var(--text-color);
-            font-family: 'Segoe UI', Roboto, sans-serif;
-            overflow: hidden; /* Screen တစ်ခုလုံးကို Fix ဖြစ်စေရန် */
+            font-family: 'Segoe UI', sans-serif;
+            overflow: hidden; /* Screen fix ဖြစ်စေရန် */
+            display: flex; justify-content: center; align-items: center;
         }
 
-        .app-wrapper {
+        .chat-container { 
+            width: 95%; max-width: 550px; 
+            height: 90vh; /* Screen ရဲ့ ၉၀% အမြင့်ကိုယူမည် */
+            background: var(--container-bg); 
+            padding: 30px; border-radius: 40px; 
+            box-shadow: var(--shadow-out); 
+            border: 1px solid #333;
             display: flex; flex-direction: column;
-            height: 100vh; /* Viewport height အပြည့်ယူမည် */
-            width: 100%; max-width: 600px; /* Mobile size width */
-            margin: 0 auto;
-            background: var(--container-bg);
-            box-shadow: 0 0 50px rgba(0,0,0,0.5);
-            position: relative;
-        }
-
-        header {
-            padding: 15px; text-align: center;
-            border-bottom: 1px solid #333;
-            background: rgba(26,26,26,0.95);
-            z-index: 10;
         }
 
         h2 { 
-            margin: 0; font-size: 18px; color: var(--gold-light); 
-            letter-spacing: 2px; text-transform: uppercase;
+            color: var(--gold-light); text-align: center; 
+            text-transform: uppercase; letter-spacing: 3px; 
+            margin: 0 0 20px 0; font-size: 20px; 
         }
 
-        #chat-box {
-            flex: 1; /* ကျန်တဲ့ space အကုန်ယူမည် */
-            overflow-y: auto; /* စာများရင် chat box ထဲမှာတင် scroll လုပ်မည် */
-            padding: 20px;
+        #chat-box { 
+            flex: 1; /* ကျန်တဲ့နေရာအကုန်ယူမည် */
+            overflow-y: auto; 
+            margin-bottom: 20px; padding: 20px; 
+            border-radius: 25px; background: var(--container-bg); 
+            box-shadow: var(--shadow-in); 
             display: flex; flex-direction: column;
-            gap: 15px;
-            background: radial-gradient(circle at top, #222 0%, #1a1a1a 100%);
             scroll-behavior: smooth;
         }
 
-        /* Scrollbar အလှဆင်ခြင်း */
-        #chat-box::-webkit-scrollbar { width: 4px; }
-        #chat-box::-webkit-scrollbar-thumb { background: #444; border-radius: 10px; }
+        /* Scrollbar hide */
+        #chat-box::-webkit-scrollbar { width: 0px; }
 
-        .msg {
-            max-width: 85%; padding: 12px 16px;
-            border-radius: 18px; font-size: 15px; line-height: 1.5;
-            word-wrap: break-word; position: relative;
-            animation: fadeIn 0.3s ease;
+        .msg { margin: 10px 0; padding: 15px; border-radius: 18px; max-width: 85%; line-height: 1.6; font-size: 15px; }
+        .user { align-self: flex-end; background: linear-gradient(145deg, #d4af37, #f1c40f); color: #000; font-weight: 700; }
+        .bot { align-self: flex-start; background: #2a2a2a; border: 1px solid #333; }
+
+        .input-area { 
+            display: flex; gap: 10px; padding-top: 5px;
         }
 
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-
-        .user {
-            align-self: flex-end;
-            background: linear-gradient(135deg, var(--gold-dark), var(--gold-light));
-            color: #000; font-weight: 600;
-            border-bottom-right-radius: 2px;
+        input { 
+            flex: 1; padding: 15px 20px; border: none; 
+            border-radius: 30px; background: var(--container-bg); 
+            color: var(--text-color); box-shadow: var(--shadow-in); 
+            outline: none; font-size: 15px;
         }
 
-        .bot {
-            align-self: flex-start;
-            background: #2a2a2a;
-            border: 1px solid #383838;
-            border-bottom-left-radius: 2px;
+        button { 
+            padding: 10px 25px; background: var(--container-bg); 
+            color: var(--gold-light); border: 1px solid var(--gold-dark); 
+            border-radius: 30px; cursor: pointer; font-weight: 700; 
+            box-shadow: var(--shadow-out); transition: 0.3s;
         }
 
-        .input-area {
-            padding: 15px; background: #1a1a1a;
-            border-top: 1px solid #333;
-            display: flex; gap: 10px; align-items: center;
-        }
+        button:active { box-shadow: var(--shadow-in); transform: scale(0.95); }
+        button:disabled { opacity: 0.4; }
 
-        input {
-            flex: 1; background: #252525; border: 1px solid #333;
-            border-radius: 25px; padding: 12px 20px; color: white;
-            outline: none; font-size: 15px; transition: 0.3s;
-        }
-
-        input:focus { border-color: var(--gold-dark); background: #2a2a2a; }
-
-        button {
-            background: var(--gold-dark); border: none; color: black;
-            width: 45px; height: 45px; border-radius: 50%;
-            cursor: pointer; display: flex; align-items: center; justify-content: center;
-            font-weight: bold; transition: 0.2s; flex-shrink: 0;
-        }
-
-        button:active { transform: scale(0.9); }
-        button:disabled { opacity: 0.5; filter: grayscale(1); }
-
-        .blink { animation: blinker 1.5s linear infinite; font-style: italic; color: var(--gold-light); }
-        @keyframes blinker { 50% { opacity: 0.3; } }
+        .blink { animation: blinker 1.5s linear infinite; }
+        @keyframes blinker { 50% { opacity: 0.5; } }
     </style>
 </head>
 <body>
-    <div class="app-wrapper">
-        <header>
-            <h2>ATOM AI WRITER</h2>
-        </header>
-
-        <div id="chat-box">
-            <div class="msg bot">မင်္ဂလာပါ။ ဘာကူညီပေးရမလဲဗျာ။</div>
-        </div>
-
+    <div class="chat-container">
+        <h2>ATOM AUTO CONTENT WRITER</h2>
+        <div id="chat-box"></div>
         <div class="input-area">
-            <input type="text" id="userInput" placeholder="Type a message..." autocomplete="off">
-            <button onclick="ask()" id="sendBtn">
-                <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
-            </button>
+            <input type="text" id="userInput" placeholder="မေးခွန်းရိုက်ပါ..." onkeypress="if(event.key==='Enter') ask()">
+            <button onclick="ask()" id="sendBtn">Send</button>
         </div>
     </div>
-
     <script>
         const box = document.getElementById('chat-box');
         const input = document.getElementById('userInput');
@@ -148,36 +110,19 @@ HTML_CONTENT = """
         async function ask() {
             const q = input.value.trim();
             if(!q) return;
-
-            input.value = '';
-            btn.disabled = true;
-
-            // User message
             box.innerHTML += `<div class="msg user">${q}</div>`;
-            box.scrollTop = box.scrollHeight;
-
-            // Thinking message
+            input.value = ''; btn.disabled = true;
             const tid = 't-' + Date.now();
-            box.innerHTML += `<div class="msg bot blink" id="${tid}">Thinking...</div>`;
+            box.innerHTML += `<div class="msg bot blink" id="${tid}">Thinking....</div>`;
             box.scrollTop = box.scrollHeight;
-
             try {
                 const r = await fetch(`/ask?q=${encodeURIComponent(q)}`);
                 const d = await r.json();
-                const target = document.getElementById(tid);
-                target.innerText = d.answer || "Error: " + d.error;
-                target.classList.remove('blink');
-            } catch (e) {
-                document.getElementById(tid).innerText = "Error: Connection failed.";
+                document.getElementById(tid).innerText = d.answer || "Error: " + d.error;
                 document.getElementById(tid).classList.remove('blink');
-            }
-
-            btn.disabled = false;
-            box.scrollTop = box.scrollHeight;
-            input.focus();
+            } catch (e) { document.getElementById(tid).innerText = "Error: Connection failed."; }
+            btn.disabled = false; box.scrollTop = box.scrollHeight;
         }
-
-        input.addEventListener("keypress", (e) => { if(e.key === "Enter") ask(); });
     </script>
 </body>
 </html>
