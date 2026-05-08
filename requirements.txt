@@ -3,3 +3,4 @@ fastapi
 uvicorn
 firebase-admin
 httpx
+youtube-transcript-api
