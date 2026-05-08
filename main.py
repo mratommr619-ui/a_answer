@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 from datetime import datetime, date
 
-# --- ၁။ Firebase Configuration (From Environment) ---
+# --- ၁။ Firebase Configuration ---
 def init_firebase():
     fb_config_str = os.getenv("FIREBASE_CONFIG_JSON")
     if not fb_config_str:
@@ -24,7 +24,7 @@ def init_firebase():
 
 db = init_firebase()
 
-# --- ၂။ Gemini API Configuration ---
+# --- ၂။ Gemini API Setup ---
 API_KEYS = [k.strip() for k in os.getenv("GEMINI_KEYS", "").split(",") if k.strip()]
 current_index = 0
 
@@ -35,7 +35,7 @@ def get_rotated_model():
     current_index = (current_index + 1) % len(API_KEYS)
     return genai.GenerativeModel('gemini-1.5-flash')
 
-# --- ၃။ Lifespan Management (Self-Ping to keep alive) ---
+# --- ၃။ Keep Alive & Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     asyncio.create_task(keep_alive())
@@ -46,13 +46,13 @@ async def keep_alive():
     if not url: return
     async with httpx.AsyncClient() as client:
         while True:
-            await asyncio.sleep(600) # 10 mins
+            await asyncio.sleep(600)
             try: await client.get(url)
             except: pass
 
 app = FastAPI(lifespan=lifespan)
 
-# --- ၄။ CORS Middleware (Firebase Admin Dashboard နဲ့ ချိတ်ရန် အရေးကြီးသည်) ---
+# --- ၄။ CORS Setup (Admin Dashboard Connection) ---
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -63,7 +63,6 @@ app.add_middleware(
 
 # --- ၅။ Helper Functions ---
 def check_expiry(udata):
-    """Premium သက်တမ်းကုန်မကုန် စစ်ဆေးခြင်း"""
     if udata.get("type") == "premium" and udata.get("expiry_date"):
         try:
             exp = datetime.strptime(udata["expiry_date"], "%Y-%m-%d").date()
@@ -71,7 +70,7 @@ def check_expiry(udata):
         except: pass
     return False
 
-# --- ၆။ User UI (The Chat Interface) ---
+# --- ၆။ UI Design (Login, Register & Chat) ---
 USER_UI = r"""
 <!DOCTYPE html>
 <html lang="en">
@@ -88,13 +87,19 @@ USER_UI = r"""
         .container { width: 100%; max-width: 500px; background: var(--card); display: flex; flex-direction: column; box-shadow: 20px 20px 60px var(--ds), -20px -20px 60px var(--ls); }
         .screen { display: none; flex-direction: column; height: 100%; padding: 25px; box-sizing: border-box; }
         .active { display: flex; }
+        
+        /* Neumorphic Inputs */
         input { width: 90%; padding: 15px; margin: 15px 0; border: none; border-radius: 50px; background: var(--bg); color: #fff; outline: none; box-shadow: inset 6px 6px 12px var(--ds), inset -6px -6px 12px var(--ls); }
+        
+        /* Neumorphic Buttons */
         button { padding: 15px 30px; border-radius: 50px; border: none; background: var(--card); color: var(--gold); font-weight: bold; cursor: pointer; box-shadow: 6px 6px 12px var(--ds), -6px -6px 12px var(--ls); transition: 0.2s; }
         button:active { box-shadow: inset 4px 4px 8px var(--ds), inset -4px -4px 8px var(--ls); transform: scale(0.98); }
+
         #chat-box { flex: 1; overflow-y: auto; padding: 15px; margin-bottom: 15px; background: var(--bg); border-radius: 20px; box-shadow: inset 8px 8px 16px var(--ds), inset -8px -8px 16px var(--ls); display: flex; flex-direction: column; }
         .msg { position: relative; margin-bottom: 25px; padding: 15px; border-radius: 20px; font-size: 14px; line-height: 1.6; max-width: 85%; word-wrap: break-word; }
         .user { align-self: flex-end; background: var(--gold); color: #000; font-weight: bold; }
         .bot { align-self: flex-start; background: var(--card); border: 1px solid #333; }
+        
         pre { background: #000 !important; border-radius: 10px; padding: 10px; overflow-x: auto; border: 1px solid #444; }
         .copy-btn { position: absolute; top: -10px; right: 10px; background: var(--card); color: var(--gold); padding: 4px 10px; border-radius: 10px; cursor: pointer; font-size: 10px; border: 1px solid #444; }
         .input-area { display: flex; gap: 10px; align-items: center; }
@@ -115,8 +120,8 @@ USER_UI = r"""
                 <p onclick="tgl()" style="color:var(--gold); cursor:pointer; font-size:12px; margin-top:20px;">Register New Account</p>
             </div>
             <div id="r-f" style="display:none">
-                <input type="text" id="ru" placeholder="Username">
-                <input type="password" id="rp" placeholder="Password">
+                <input type="text" id="ru" placeholder="Choose Username">
+                <input type="password" id="rp" placeholder="Choose Password">
                 <button onclick="auth('register')">CREATE ACCOUNT</button>
                 <p onclick="tgl()" style="color:var(--gold); cursor:pointer; font-size:12px; margin-top:20px;">Back to Login</p>
             </div>
@@ -139,23 +144,40 @@ USER_UI = r"""
 
     <script>
         let curU="", curP="", cache={};
-        function tgl(){ const l=document.getElementById('l-f'),r=document.getElementById('r-f'); l.style.display=l.style.display==='none'?'block':'none'; r.style.display=r.style.display==='none'?'block':'none'; }
+
+        // Toggle between Login and Register
+        function tgl(){
+            const l=document.getElementById('l-f'), r=document.getElementById('r-f');
+            l.style.display = l.style.display==='none' ? 'block' : 'none';
+            r.style.display = r.style.display==='none' ? 'block' : 'none';
+        }
         
         async function auth(t){
-            const u=t==='login'?document.getElementById('u').value:document.getElementById('ru').value;
-            const p=t==='login'?document.getElementById('p').value:document.getElementById('rp').value;
-            const r=await fetch("/"+t,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
-            const d=await r.json();
+            // Get inputs based on type
+            const u = t==='login' ? document.getElementById('u').value : document.getElementById('ru').value;
+            const p = t==='login' ? document.getElementById('p').value : document.getElementById('rp').value;
+            
+            if(!u || !p) { alert("Please fill all fields"); return; }
+
+            const res = await fetch("/"+t, {
+                method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({username:u, password:p})
+            });
+            const d = await res.json();
+
             if(d.status==='success'){
-                if(t==='register'){alert("Success! Please Login."); tgl();}
-                else { 
+                if(t==='register'){
+                    alert("Success! Now Login."); 
+                    tgl();
+                } else { 
                     curU=u; curP=p; 
                     document.getElementById('auth-screen').classList.remove('active'); 
                     document.getElementById('chat-screen').classList.add('active'); 
                     document.getElementById('du').innerText=u.toUpperCase(); 
                     document.getElementById('dt').innerText=d.tier.toUpperCase(); 
                 }
-            } else { alert(d.message || "Login Failed"); }
+            } else { alert(d.message || "Operation Failed"); }
         }
 
         function formatAI(t) {
@@ -173,24 +195,30 @@ USER_UI = r"""
             box.innerHTML+=`<div class="msg bot" id="${tid}"><i class="fas fa-spinner fa-spin"></i> ATOM is thinking...</div>`;
             box.scrollTop=box.scrollHeight;
 
-            const res=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:curU,password:curP,query:q})});
-            const d=await res.json();
-            const target=document.getElementById(tid);
+            const res=await fetch("/ask",{
+                method:"POST",
+                headers:{"Content-Type":"application/json"},
+                body:JSON.stringify({username:curU, password:curP, query:q})
+            });
+            const d = await res.json();
+            const target = document.getElementById(tid);
             
             if(d.answer){
                 cache[tid] = d.answer;
                 target.innerHTML = formatAI(d.answer);
                 target.innerHTML += `<div class="copy-btn" onclick="copy('${tid}', this)">COPY</div>`;
                 target.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-                if(d.img) {
-                    target.innerHTML += `<div style="margin-top:10px" onclick="openI('${d.img}')"><img src="${d.img}" style="width:100%; border-radius:10px; border:1px solid #444;"></div>`;
-                }
-            } else { target.innerHTML = `<span style="color:red">${d.error}</span><br><a href="https://t.me/mratom_619" style="color:var(--gold); font-size:12px;">Get Premium</a>`; }
+            } else { 
+                target.innerHTML = `<span style="color:red">${d.error}</span><br><a href="https://t.me/mratom_619" style="color:var(--gold); font-size:12px;">Get Premium</a>`; 
+            }
             box.scrollTop=box.scrollHeight;
         }
 
-        function copy(id, b){ navigator.clipboard.writeText(cache[id]); b.innerText="COPIED!"; setTimeout(()=>b.innerText="COPY", 2000); }
-        function openI(src){ document.getElementById('lb-i').src=src; document.getElementById('lb').style.display='flex'; }
+        function copy(id, b){ 
+            navigator.clipboard.writeText(cache[id]); 
+            b.innerText="COPIED!"; 
+            setTimeout(()=>b.innerText="COPY", 2000); 
+        }
     </script>
 </body>
 </html>
@@ -237,7 +265,7 @@ async def ask_ai(data: dict):
     usage = user_data.get("usage", {"date": today, "count": 0, "content_count": 0})
     if usage["date"] != today: usage = {"date": today, "count": 0, "content_count": 0}
 
-    # --- Business Rules ---
+    # Free Plan Logic
     if tier == "free":
         if usage["count"] >= 5: return {"error": "Daily limit (5/5) reached."}
         if any(w in q.lower() for w in ["write", "essay", "article", "ရေးပေး"]):
@@ -253,7 +281,7 @@ async def ask_ai(data: dict):
         return {"answer": response.text}
     except Exception as e: return {"error": str(e)}
 
-# --- ၈။ Admin CRUD Endpoints (Called by Firebase) ---
+# --- ၈။ Admin Endpoints (For External Admin Dashboard) ---
 
 @app.post("/admin/list")
 async def admin_list(data: dict):
