@@ -2,7 +2,7 @@ name: Deploy to Firebase Hosting on merge
 'on':
   push:
     branches:
-      - main  # သင် Code တင်နေကျ Branch နာမည် (ဥပမာ- main သို့မဟုတ် master)
+      - main
 
 jobs:
   build_and_deploy:
@@ -12,8 +12,6 @@ jobs:
       - uses: FirebaseExtended/action-hosting-deploy@v0
         with:
           repoToken: '${{ secrets.GITHUB_TOKEN }}'
-          # အောက်က နေရာမှာ သင့် GitHub Secrets ထဲမှာ သိမ်းထားတဲ့ နာမည်အတိုင်း ဖြစ်ရပါမယ်
-          # များသောအားဖြင့် firebase init လုပ်စဉ်က အလိုအလျောက် သတ်မှတ်ပေးထားတာပါ
-          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_YOUR_PROJECT_NAME }}'
+          firebaseServiceAccount: '${{ secrets.FIREBASE_SERVICE_ACCOUNT_ANSWER_650D2 }}'
           channelId: live
-          projectId: answer-650d2 # သင့်ရဲ့ Firebase Project ID အစစ်ကို ဒီမှာ ထည့်ပါ
+          projectId: answer-650d2
