@@ -10,7 +10,18 @@ from fastapi.responses import HTMLResponse, JSONResponse, FileResponse
 from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 from datetime import datetime, date
+from fastapi.middleware.cors import CORSMiddleware
 
+app = FastAPI(lifespan=lifespan)
+
+# CORS ကို အကုန်ဖွင့်ပေးလိုက်ခြင်း (ဒါမှ Firebase ကနေ ခေါ်လို့ရမှာပါ)
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 # --- Firebase Setup ---
 def init_firebase():
     fb_config_str = os.getenv("FIREBASE_CONFIG_JSON")
