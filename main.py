@@ -22,7 +22,7 @@ def init_firebase():
 
 db = init_firebase()
 
-# --- 2. API Key Rotation ---
+# --- 2. Gemini API Setup ---
 API_KEYS = [k.strip() for k in os.getenv("GEMINI_KEYS", "").split(",") if k.strip()]
 current_index = 0
 
@@ -51,15 +51,7 @@ async def keep_alive():
 app = FastAPI(lifespan=lifespan)
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_credentials=True, allow_methods=["*"], allow_headers=["*"])
 
-def check_expiry(udata):
-    if udata.get("type") == "premium" and udata.get("expiry_date"):
-        try:
-            exp = datetime.strptime(udata["expiry_date"], "%Y-%m-%d").date()
-            if exp < date.today(): return True
-        except: pass
-    return False
-
-# --- 4. UI Design (Enter to Send Enabled) ---
+# --- 4. UI Design (Fully Functional Chat) ---
 USER_UI = r"""
 <!DOCTYPE html>
 <html lang="en">
@@ -96,7 +88,7 @@ USER_UI = r"""
                 <input type="text" id="u" placeholder="Username" onkeypress="if(event.key==='Enter') auth('login')">
                 <input type="password" id="p" placeholder="Password" onkeypress="if(event.key==='Enter') auth('login')">
                 <button onclick="auth('login')" style="width:100%">SIGN IN</button>
-                <p onclick="tgl()" style="color:var(--gold); cursor:pointer; font-size:12px; margin-top:20px;">Register Account</p>
+                <p onclick="tgl()" style="color:var(--gold); cursor:pointer; font-size:12px; margin-top:20px;">Register New Account</p>
             </div>
             <div id="r-f" style="display:none">
                 <input type="text" id="ru" placeholder="Username" onkeypress="if(event.key==='Enter') auth('register')">
@@ -105,9 +97,10 @@ USER_UI = r"""
                 <p onclick="tgl()" style="color:var(--gold); cursor:pointer; font-size:12px; margin-top:20px;">Back to Login</p>
             </div>
         </div>
+
         <div id="chat-screen" class="screen">
             <div style="display:flex; justify-content:space-between; color:var(--gold); margin-bottom:10px; border-bottom:1px solid #333; padding-bottom:5px;">
-                <b id="du"></b><span id="dt" style="border:1px solid; padding:2px 8px; border-radius:20px;"></span>
+                <b id="du"></b><span style="border:1px solid; padding:2px 8px; border-radius:20px;">PRO</span>
             </div>
             <div id="chat-box"></div>
             <div class="input-area">
@@ -116,9 +109,11 @@ USER_UI = r"""
             </div>
         </div>
     </div>
+
     <script>
         let curU="", curP="", cache={};
         function tgl(){ document.getElementById('l-f').style.display=document.getElementById('l-f').style.display==='none'?'block':'none'; document.getElementById('r-f').style.display=document.getElementById('r-f').style.display==='none'?'block':'none'; }
+        
         async function auth(t){
             const u=t==='login'?document.getElementById('u').value:document.getElementById('ru').value;
             const p=t==='login'?document.getElementById('p').value:document.getElementById('rp').value;
@@ -127,13 +122,15 @@ USER_UI = r"""
             const d=await res.json();
             if(d.status==='success'){
                 if(t==='register'){ alert("Success!"); tgl(); }
-                else { curU=u; curP=p; document.getElementById('auth-screen').classList.remove('active'); document.getElementById('chat-screen').classList.add('active'); document.getElementById('du').innerText=u.toUpperCase(); document.getElementById('dt').innerText=d.tier.toUpperCase(); }
+                else { curU=u; curP=p; document.getElementById('auth-screen').classList.remove('active'); document.getElementById('chat-screen').classList.add('active'); document.getElementById('du').innerText=u.toUpperCase(); }
             } else alert(d.message);
         }
+
         function formatAI(t) {
             let res = t.replace(/```(\w+)?\n([\s\S]*?)```/g, (m, lang, code) => `<pre><code class="language-${lang || 'plaintext'}">${code.trim()}</code></pre>`);
             return res.replace(/\n/g, '<br>');
         }
+
         async function ask(){
             const inp=document.getElementById('query'), box=document.getElementById('chat-box');
             const q=inp.value; if(!q) return; inp.value='';
@@ -141,8 +138,9 @@ USER_UI = r"""
             const tid='t'+Date.now();
             box.innerHTML+=`<div class="msg bot" id="${tid}">Thinking...</div>`;
             box.scrollTop=box.scrollHeight;
+
             try {
-                const res=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:curU,password:curP,query:q})});
+                const res=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({query:q})});
                 const d=await res.json();
                 const target=document.getElementById(tid);
                 if(d.answer){
@@ -150,8 +148,8 @@ USER_UI = r"""
                     target.innerHTML = formatAI(d.answer);
                     target.innerHTML += `<div class="copy-btn" onclick="copy('${tid}', this)">COPY</div>`;
                     target.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
-                } else target.innerHTML=`<span style="color:red">${d.error}</span>`;
-            } catch(e) { document.getElementById(tid).innerText = "Error."; }
+                } else target.innerHTML=`<span style="color:red">AI Error. Try again.</span>`;
+            } catch(e) { document.getElementById(tid).innerText = "Server Error."; }
             box.scrollTop=box.scrollHeight;
         }
         function copy(id, b){ navigator.clipboard.writeText(cache[id]); b.innerText="COPIED!"; setTimeout(()=>b.innerText="COPY", 2000); }
@@ -160,7 +158,7 @@ USER_UI = r"""
 </html>
 """
 
-# --- 5. Backend Endpoints ---
+# --- 5. Backend Endpoints (Limits Removed) ---
 @app.get("/", response_class=HTMLResponse)
 async def home(): return USER_UI
 
@@ -169,7 +167,7 @@ async def register(data: dict):
     u, p = data.get("username"), data.get("password")
     user_ref = db.collection("users").document(u)
     if user_ref.get().exists: return {"status": "fail", "message": "Username exists"}
-    user_ref.set({"password": p, "type": "free", "usage": {"date": str(date.today()), "count": 0, "content_count": 0}})
+    user_ref.set({"password": p, "type": "free"})
     return {"status": "success"}
 
 @app.post("/login")
@@ -178,36 +176,18 @@ async def login(data: dict):
     user_ref = db.collection("users").document(u)
     doc = user_ref.get()
     if doc.exists and doc.to_dict()["password"] == p:
-        ud = doc.to_dict()
-        if check_expiry(ud): user_ref.update({"type": "free", "expiry_date": None})
-        return {"status": "success", "tier": ud.get("type", "free")}
+        return {"status": "success"}
     return {"status": "fail", "message": "Login Failed"}
 
 @app.post("/ask")
 async def ask(data: dict):
-    u, p, q = data.get("username"), data.get("password"), data.get("query")
-    user_ref = db.collection("users").document(u)
-    ud = user_ref.get().to_dict()
-    
-    tier, today = ud["type"], str(date.today())
-    usage = ud.get("usage", {"date": today, "count": 0, "content_count": 0})
-    if usage["date"] != today: usage = {"date": today, "count": 0, "content_count": 0}
-
-    if tier == "free":
-        if usage["count"] >= 5: return {"error": "Limit reached."}
-        if any(w in q.lower() for w in ["write", "essay", "article", "ရေးပေး"]):
-            if usage["content_count"] >= 2: return {"error": "Writing limit reached."}
-            usage["content_count"] += 1
-        if any(w in q.lower() for w in ["draw", "image", "ပုံဆွဲ"]): return {"error": "Premium Feature."}
-        usage["count"] += 1
-        user_ref.update({"usage": usage})
-
+    q = data.get("query")
     try:
         key = get_api_key()
         genai.configure(api_key=key)
         
-        # Safety Settings တွေကို လုံးဝပိတ်လိုက်ပါတယ် (ဒါမှ Error မတက်မှာပါ)
-        safety_settings = [
+        # Safety ပိတ်ထားမှ အကုန်ဖြေမှာပါ
+        safety = [
             {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
             {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
@@ -215,22 +195,10 @@ async def ask(data: dict):
         ]
         
         model = genai.GenerativeModel('gemini-1.5-flash')
-        # Safety settings ပါ ထည့်ပြီး ခေါ်ပါမယ်
-        resp = model.generate_content(q, safety_settings=safety_settings)
+        resp = model.generate_content(q, safety_settings=safety)
         return {"answer": resp.text}
-    except Exception as e: return {"error": f"AI Error. Please try again."}
-
-@app.post("/admin/list")
-async def admin_list(data: dict):
-    if data.get("pass") != os.getenv("ADMIN_PASSWORD"): return {"error": "Unauthorized"}
-    users = [dict(doc.to_dict(), id=doc.id) for doc in db.collection("users").stream()]
-    return {"users": users}
-
-@app.post("/admin/update")
-async def admin_upd(data: dict):
-    if data.get("pass") != os.getenv("ADMIN_PASSWORD"): return {"error": "Unauthorized"}
-    db.collection("users").document(data["target"]).update({"type": data["type"], "expiry_date": data["expiry"]})
-    return {"status": "success"}
+    except Exception as e:
+        return {"error": str(e)}
 
 if __name__ == "__main__":
     import uvicorn
