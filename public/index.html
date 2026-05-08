@@ -1,1 +1,132 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ATOM AI - ADMIN DASHBOARD</title>
+    <style>
+        :root { --bg: #121212; --card: #1e1e1e; --gold: #f1c40f; --dark-shadow: #0a0a0a; --light-shadow: #2a2a2a; }
+        body { background: var(--bg); color: #fff; font-family: 'Segoe UI', sans-serif; padding: 20px; }
+        
+        .container { 
+            max-width: 900px; margin: 0 auto; background: var(--card); padding: 30px; border-radius: 30px;
+            box-shadow: 20px 20px 60px var(--dark-shadow), -20px -20px 60px var(--light-shadow);
+        }
 
+        h2 { color: var(--gold); text-align: center; letter-spacing: 3px; margin-bottom: 30px; }
+
+        .auth-section { text-align: center; margin-bottom: 30px; padding: 20px; border-radius: 20px; box-shadow: inset 6px 6px 12px var(--dark-shadow), inset -6px -6px 12px var(--light-shadow); }
+        
+        input, select {
+            padding: 12px; border-radius: 10px; border: none; background: #0d0d0d; color: #fff; margin: 5px;
+            box-shadow: inset 3px 3px 6px #000; outline: none;
+        }
+
+        button {
+            padding: 10px 20px; border-radius: 10px; border: none; background: var(--card); color: var(--gold);
+            font-weight: bold; cursor: pointer; box-shadow: 4px 4px 8px var(--dark-shadow), -4px -4px 8px var(--light-shadow);
+            transition: 0.2s;
+        }
+        button:active { box-shadow: inset 2px 2px 5px #000; transform: scale(0.98); }
+
+        table { width: 100%; border-collapse: collapse; margin-top: 20px; background: #0d0d0d; border-radius: 15px; overflow: hidden; }
+        th, td { padding: 15px; text-align: left; border-bottom: 1px solid #222; }
+        th { color: var(--gold); font-size: 14px; }
+        .premium-row { color: var(--gold); font-weight: bold; }
+        
+        .action-btn { font-size: 11px; padding: 5px 10px; margin-right: 5px; }
+        .del-btn { color: #ff4444; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>ADMIN DASHBOARD</h2>
+    
+    <div class="auth-section">
+        <input type="password" id="adminPass" placeholder="Admin Secret Key">
+        <input type="text" id="renderUrl" placeholder="Render Backend URL (e.g. https://atom.onrender.com)" style="width: 300px;">
+        <button onclick="loadUsers()">FETCH DATA</button>
+    </div>
+
+    <div style="overflow-x: auto;">
+        <table>
+            <thead>
+                <tr>
+                    <th>Username</th>
+                    <th>Tier</th>
+                    <th>Expiry Date</th>
+                    <th>Manage</th>
+                </tr>
+            </thead>
+            <tbody id="tableBody"></tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+    async function loadUsers() {
+        const pass = document.getElementById('adminPass').value;
+        const baseUrl = document.getElementById('renderUrl').value.replace(/\/$/, "");
+        
+        try {
+            const res = await fetch(`${baseUrl}/admin/list`, {
+                method: "POST",
+                headers: {"Content-Type": "application/json"},
+                body: JSON.stringify({pass: pass})
+            });
+            const data = await res.json();
+            if(data.error) return alert("Unauthorized!");
+
+            const tbody = document.getElementById('tableBody');
+            tbody.innerHTML = "";
+            data.users.forEach(u => {
+                tbody.innerHTML += `
+                    <tr class="${u.type === 'premium' ? 'premium-row' : ''}">
+                        <td>${u.id}</td>
+                        <td>
+                            <select id="t-${u.id}">
+                                <option value="free" ${u.type === 'free' ? 'selected' : ''}>FREE</option>
+                                <option value="premium" ${u.type === 'premium' ? 'selected' : ''}>PREMIUM</option>
+                            </select>
+                        </td>
+                        <td><input type="date" id="e-${u.id}" value="${u.expiry_date || ''}"></td>
+                        <td>
+                            <button class="action-btn" onclick="updateUser('${u.id}')">SAVE</button>
+                            <button class="action-btn del-btn" onclick="deleteUser('${u.id}')">DELETE</button>
+                        </td>
+                    </tr>
+                `;
+            });
+        } catch (e) { alert("Check Backend URL or Admin Pass!"); }
+    }
+
+    async function updateUser(uid) {
+        const pass = document.getElementById('adminPass').value;
+        const baseUrl = document.getElementById('renderUrl').value.replace(/\/$/, "");
+        const tier = document.getElementById(`t-${uid}`).value;
+        const exp = document.getElementById(`e-${uid}`).value;
+
+        await fetch(`${baseUrl}/admin/update`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({pass: pass, target: uid, type: tier, expiry: exp})
+        });
+        alert("User Updated!");
+        loadUsers();
+    }
+
+    async function deleteUser(uid) {
+        if(!confirm("Delete this user?")) return;
+        const pass = document.getElementById('adminPass').value;
+        const baseUrl = document.getElementById('renderUrl').value.replace(/\/$/, "");
+        await fetch(`${baseUrl}/admin/delete`, {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({pass: pass, target: uid})
+        });
+        loadUsers();
+    }
+</script>
+</body>
+</html>
