@@ -5,27 +5,24 @@ from fastapi.responses import HTMLResponse
 
 app = FastAPI()
 
-# Environment Variable ထဲကနေ API Keys တွေကို ဖတ်မယ်
-# Render Settings ထဲမှာ GEMINI_KEYS ဆိုတဲ့ နာမည်နဲ့ ကော်မာခံပြီး ထည့်ထားပေးပါ
-raw_keys = os.getenv("GEMINI_KEYS", "")
-API_KEYS = [k.strip() for k in raw_keys.split(",") if k.strip()]
 
-# အကယ်၍ Environment Variable ထဲမှာ မရှိရင် အရန်အနေနဲ့ အရင် Key တွေကို သုံးမယ်
-if not API_KEYS:
-    API_KEYS = [
-        "AIzaSyDtRhod768k7HX6gVufgmXGUxvb3veAx5k",
-        "AIzaSyBcuyznz4DU0nDigC4kCnuX8oh44WkyEC8",
-        "AIzaSyAJJjMJGNKitoYgUrvy9jVwCctVr5WLDik",
-        "AIzaSyD6ZPN-cXY7xIJXMdHYAJYkVSXdkU0rDFE"
-    ]
+def get_api_keys():
+    raw_keys = os.getenv("GEMINI_KEYS", "")
+    return [k.strip() for k in raw_keys.split(",") if k.strip()]
 
+API_KEYS = get_api_keys()
 current_index = 0
 
 def get_rotated_model():
     global current_index
+    if not API_KEYS:
+        return None
+    
+    
     key = API_KEYS[current_index]
     genai.configure(api_key=key)
     model = genai.GenerativeModel('gemini-1.5-flash')
+    
     current_index = (current_index + 1) % len(API_KEYS)
     return model
 
@@ -35,14 +32,14 @@ HTML_CONTENT = """
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>ATOM AI - PRO</title>
+    <title>ATOM AI - SECURE</title>
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/styles/vs2015.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.9.0/highlight.min.js"></script>
     <style>
-        :root { --bg: #0a0a0a; --card: #161616; --gold: #f1c40f; }
+        :root { --bg: #0d0d0d; --card: #1a1a1a; --gold: #f1c40f; }
         body { margin: 0; background: var(--bg); color: #fff !important; font-family: sans-serif; overflow: hidden; }
         .wrapper { display: flex; flex-direction: column; height: 100vh; max-width: 600px; margin: 0 auto; background: var(--card); border: 1px solid #333; }
-        header { padding: 15px; text-align: center; border-bottom: 1px solid #333; color: var(--gold); font-weight: bold; letter-spacing: 2px; }
+        header { padding: 15px; text-align: center; border-bottom: 1px solid #333; color: var(--gold); font-weight: bold; text-transform: uppercase; letter-spacing: 2px; }
         #chat-box { flex: 1; overflow-y: auto; padding: 20px; display: flex; flex-direction: column; gap: 15px; background: #000; }
         .msg { max-width: 85%; padding: 15px; border-radius: 18px; font-size: 15px; line-height: 1.6; color: #fff !important; }
         .user { align-self: flex-end; background: linear-gradient(135deg, #d4af37, #f1c40f); color: #000 !important; font-weight: bold; }
@@ -56,7 +53,7 @@ HTML_CONTENT = """
 </head>
 <body>
     <div class="wrapper">
-        <header>ATOM AI (ENV ROTATOR)</header>
+        <header>ATOM AI (SECURE MODE)</header>
         <div id="chat-box"></div>
         <div class="input-area">
             <input type="text" id="userInput" placeholder="Ask anything..." autocomplete="off">
@@ -89,8 +86,8 @@ HTML_CONTENT = """
                     target.innerHTML = format(d.answer);
                     target.querySelectorAll('pre code').forEach(el => hljs.highlightElement(el));
                     target.innerHTML += \`<br><button class="copy-btn" onclick="navigator.clipboard.writeText(\\\`\${d.answer.replace(/\\\`/g, '\\\\\\\\\`').replace(/\\\\$/g, '\\\\\\\\$')}\\\'); this.innerText='✅ Copied!'">Copy Text</button>\`;
-                } else { target.innerText = "Error: " + d.error; }
-            } catch (e) { document.getElementById(tid).innerText = "Server Error."; }
+                } else { target.innerText = "Error: " + (d.error || "Please check Environment Variables."); }
+            } catch (e) { document.getElementById(tid).innerText = "Server error."; }
             btn.disabled = false; box.scrollTop = box.scrollHeight;
         }
         btn.onclick = ask;
@@ -107,6 +104,8 @@ async def home(): return HTML_CONTENT
 async def ask_gemini(q: str):
     try:
         model = get_rotated_model()
+        if not model:
+            return {"error": "GEMINI_KEYS Environment Variable is missing or empty!"}
         response = model.generate_content(q)
         return {"answer": response.text}
     except Exception as e:
