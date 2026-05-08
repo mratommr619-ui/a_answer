@@ -33,8 +33,7 @@ def get_rotated_model():
     if not API_KEYS: return None
     genai.configure(api_key=API_KEYS[current_index])
     current_index = (current_index + 1) % len(API_KEYS)
-    return genai.GenerativeModel('gemini-1.5-flash')
-
+    return genai.GenerativeModel('gemini-1.5-flash-latest')
 # --- ၃။ Keep Alive & Lifespan ---
 @asynccontextmanager
 async def lifespan(app: FastAPI):
