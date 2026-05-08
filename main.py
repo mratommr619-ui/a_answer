@@ -22,7 +22,7 @@ def init_firebase():
 
 db = init_firebase()
 
-# --- 2. Gemini API Key Rotation ---
+# --- 2. API Key Rotation ---
 API_KEYS = [k.strip() for k in os.getenv("GEMINI_KEYS", "").split(",") if k.strip()]
 current_index = 0
 
@@ -59,7 +59,7 @@ def check_expiry(udata):
         except: pass
     return False
 
-# --- 4. UI Design (Enter to Send & All Logic Included) ---
+# --- 4. UI Design (Enter to Send Enabled) ---
 USER_UI = r"""
 <!DOCTYPE html>
 <html lang="en">
@@ -203,12 +203,20 @@ async def ask(data: dict):
         user_ref.update({"usage": usage})
 
     try:
-        # API Key ကို ယူပြီး model ကို အောက်ကအတိုင်း Direct ဆောက်ပါမယ်
         key = get_api_key()
         genai.configure(api_key=key)
-        # အောက်က model နာမည်က standard အကျဆုံးပါပဲ
+        
+        # Safety Settings တွေကို လုံးဝပိတ်လိုက်ပါတယ် (ဒါမှ Error မတက်မှာပါ)
+        safety_settings = [
+            {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
+            {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
+        ]
+        
         model = genai.GenerativeModel('gemini-1.5-flash')
-        resp = model.generate_content(q)
+        # Safety settings ပါ ထည့်ပြီး ခေါ်ပါမယ်
+        resp = model.generate_content(q, safety_settings=safety_settings)
         return {"answer": resp.text}
     except Exception as e: return {"error": f"AI Error. Please try again."}
 
