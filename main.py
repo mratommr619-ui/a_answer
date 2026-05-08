@@ -46,7 +46,7 @@ def get_yt_transcript(video_id):
         return " ".join([t['text'] for t in ts_list])
     except: return None
 
-# --- ၄။ UI Design (History ပြန်ဖတ်နိုင်အောင် Update လုပ်ထားသည်) ---
+# --- ၄။ UI Design ---
 USER_UI = r"""
 <!DOCTYPE html>
 <html lang="en">
@@ -74,7 +74,7 @@ USER_UI = r"""
 <body>
     <div class="container">
         <div id="auth-screen" class="screen active" style="justify-content:center; text-align:center;">
-            <h1 style="color:var(--gold); letter-spacing:5px;">ATOM AI</h1>
+            <h1 style="color:var(--gold);">ATOM AI</h1>
             <input type="text" id="u" placeholder="Username">
             <input type="password" id="p" placeholder="Password">
             <button onclick="auth('login')" style="width:100%">SIGN IN</button>
@@ -86,15 +86,14 @@ USER_UI = r"""
             </div>
             <div id="chat-box"></div>
             <div style="display:flex; gap:10px;">
-                <input type="text" id="query" placeholder="Ask anything..." onkeypress="if(event.key==='Enter') ask()">
+                <input type="text" id="query" placeholder="Ask anything or Draw..." onkeypress="if(event.key==='Enter') ask()">
                 <button onclick="ask()" style="width:50px; border-radius:50%;"><i class="fas fa-paper-plane"></i></button>
             </div>
         </div>
     </div>
     <script>
-        let curU="", curP="", cache={};
-        function tgl(){ /* Login/Register Toggle Logic */ }
-        
+        let curU="", curP="";
+        function tgl(){ /* Toggle Logic */ }
         async function auth(t){
             const u=document.getElementById('u').value, p=document.getElementById('p').value;
             const res=await fetch("/"+t,{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:u,password:p})});
@@ -105,24 +104,18 @@ USER_UI = r"""
                 document.getElementById('chat-screen').classList.add('active');
                 document.getElementById('du').innerText=u.toUpperCase();
                 document.getElementById('dt').innerText=d.tier.toUpperCase();
-                // History ကို ဆွဲထုတ်ပြမယ်
-                if(d.history) d.history.forEach(m => appendMsg(m.q, m.a));
+                if(d.history) d.history.forEach(m => appendMsg(m.q, m.a, m.img));
             } else alert(d.message);
         }
-
-        function appendMsg(q, a){
+        function appendMsg(q, a, i){
             const box=document.getElementById('chat-box');
             box.innerHTML+=`<div class="msg user">${q}</div>`;
-            const tid='t'+Date.now()+Math.random();
-            box.innerHTML+=`<div class="msg bot" id="${tid}">${formatAI(a)}</div>`;
+            let botMsg = `<div class="msg bot">${a.replace(/\n/g, '<br>')}`;
+            if(i) botMsg += `<br><img src="${i}" style="width:100%; border-radius:10px; margin-top:10px;">`;
+            botMsg += `</div>`;
+            box.innerHTML += botMsg;
             box.scrollTop=box.scrollHeight;
         }
-
-        function formatAI(t) {
-            let res = t.replace(/```(\w+)?\n([\s\S]*?)```/g, (m, lang, code) => `<pre><code class="language-${lang || 'plaintext'}">${code.trim()}</code></pre>`);
-            return res.replace(/\n/g, '<br>');
-        }
-
         async function ask(){
             const inp=document.getElementById('query'), box=document.getElementById('chat-box');
             const q=inp.value; if(!q) return; inp.value='';
@@ -132,7 +125,9 @@ USER_UI = r"""
             box.scrollTop=box.scrollHeight;
             const res=await fetch("/ask",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({username:curU,password:curP,query:q})});
             const d=await res.json();
-            document.getElementById(tid).innerHTML = formatAI(d.answer);
+            const target=document.getElementById(tid);
+            target.innerHTML = d.answer.replace(/\n/g, '<br>');
+            if(d.img) target.innerHTML += `<br><img src="${d.img}" style="width:100%; border-radius:10px; margin-top:10px;">`;
             box.scrollTop=box.scrollHeight;
         }
     </script>
@@ -154,8 +149,7 @@ async def login(data: dict):
     doc = user_ref.get()
     if doc.exists and doc.to_dict()["password"] == p:
         ud = doc.to_dict()
-        # History ပါ တစ်ခါတည်း ပို့ပေးလိုက်မယ်
-        history = ud.get("chat_history", [])[-10:] # နောက်ဆုံး ၁၀ ခုပဲ ပြမယ်
+        history = ud.get("chat_history", [])[-10:]
         return {"status": "success", "tier": ud.get("type", "free"), "history": history}
     return {"status": "fail", "message": "Failed"}
 
@@ -164,14 +158,32 @@ async def ask(data: dict):
     u, p, q = data.get("username"), data.get("password"), data.get("query")
     user_ref = db.collection("users").document(u)
     ud = user_ref.get().to_dict()
-    
-    # History ဟောင်းကို AI ဆီ ပို့ဖို့ ပြင်မယ်
-    history = ud.get("chat_history", [])[-5:] # Context အတွက် နောက်ဆုံး ၅ ခု ယူမယ်
+    tier = ud.get("type", "free")
+
+    # History Logic
+    history = ud.get("chat_history", [])[-5:]
     history_text = "\n".join([f"User: {m['q']}\nAI: {m['a']}" for m in history])
 
+    # --- ပုံဆွဲရန် Logic (AI ကို မမေးမီ စစ်ခြင်း) ---
+    img_url = None
+    if any(w in q.lower() for w in ["draw", "image", "ပုံဆွဲ", "photo"]):
+        if tier == "free": return {"error": "Premium Feature Only!"}
+        # AI ဆီကနေ English Prompt တစ်ခု တောင်းမယ်
+        client_tmp = get_rotated_groq_client()
+        prompt_gen = client_tmp.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=[{"role": "system", "content": "Convert the user request into a short English image generation prompt. Output ONLY the prompt."},
+                      {"role": "user", "content": q}]
+        )
+        en_prompt = prompt_gen.choices[0].message.content.strip()
+        img_url = f"https://pollinations.ai/p/{en_prompt.replace(' ', '%20')}?width=1024&height=1024&seed={int(datetime.now().timestamp())}&model=flux"
+
+    # --- System Prompt (The Intelligent Fix) ---
     sys_prompt = (
-        "You are a wise Myanmar Professor. Reply in the user's language. "
-        "Use natural Myanmar phrasing. \nChat History:\n" + history_text
+        "You are a wise Myanmar Professor. "
+        "Rule 1: If the user speaks English, reply in English. If Myanmar, reply in professional Myanmar. "
+        "Rule 2: If the user asks to draw or see a photo, DO NOT say you cannot. Say something like 'I have drawn it for you' or 'Here is the image'. "
+        "\nChat History:\n" + history_text
     )
 
     try:
@@ -182,11 +194,9 @@ async def ask(data: dict):
         )
         answer = resp.choices[0].message.content
         
-        # History ကို Firestore ထဲမှာ သိမ်းမယ်
-        user_ref.update({
-            "chat_history": firestore.ArrayUnion([{"q": q, "a": answer, "t": str(datetime.now())}])
-        })
-        return {"answer": answer}
+        # History Update
+        user_ref.update({"chat_history": firestore.ArrayUnion([{"q": q, "a": answer, "img": img_url}])})
+        return {"answer": answer, "img": img_url}
     except: return {"error": "AI Error"}
 
 if __name__ == "__main__":
